@@ -56,8 +56,7 @@
                   🔍 Ingredientes
                 </button>
                 <button class="boton-comprar" :class="{ 'boton-agotado': comida.disponibilidad === 0 }"
-                  @click="agregarAlcarrito(comida)"
-                  :disabled="comida.disponibilidad === 0">
+                  @click="agregarAlcarrito(comida)" :disabled="comida.disponibilidad === 0">
                   {{ comida.disponibilidad > 0 ? 'Agregar al carrito' : 'Agotado' }}
                 </button>
               </div>
@@ -99,6 +98,9 @@
           <div class="item-info">
             <p class="item-nombre">{{ item.nombre }}</p>
             <p class="item-precio">{{ item.precio }}</p>
+            <button class="boton-eliminar" @click="eliminarDelCarrito(index)">
+              🗑️
+            </button>
           </div>
         </div>
       </div>
@@ -110,6 +112,59 @@
         <button class="boton-pedir" @click="confirmarPedido">Confirmar Pedido</button>
       </div>
     </aside>
+
+    <div v-if="alertaVisible" class="toast-personalizado" :class="alertaTipo">
+      <div class="icono-alerta">
+        <span v-if="alertaTipo === 'exito'">✅</span>
+        <span v-if="alertaTipo === 'error'">❌</span>
+        <span v-if="alertaTipo === 'info'">ℹ️</span>
+      </div>
+      <p>{{ alertaMensaje }}</p>
+    </div>
+
+    <div v-if="cargando" class="pantalla-carga">
+      <div class="spinner"></div>
+      <p>Enviando tu pedido a la cocina...</p>
+    </div>
+    <div v-if="mostrarFactura" class="overlay-factura">
+      <div class="card-factura">
+        <button class="cerrar-factura" @click="mostrarFactura = false">X</button>
+        <div id="seccion-factura" class="contenido-factura">
+          <div class="header-factura">
+            <img src="https://cdn-icons-png.flaticon.com/512/737/737967.png" alt="Logo">
+            <h1>BURG & <span class="naranja">BITE</span></h1>
+            <p>¡Sabor en cada mordisco!</p>
+            <hr>
+          </div>
+          <div class="info-pedido">
+            <p><strong>Nro. Pedido:</strong>#{{ datosFactura.id }}</p>
+            <p><strong>Fecha:</strong>{{ datosFactura.fecha }}</p>
+            <p><strong>Ubicación:</strong>San Gil, Santander</p>
+          </div>
+          <table class="tabla-factura">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Precio</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, index) in datosFactura.items" :key="index">
+                <td>{{ item.nombre }}</td>
+                <td>${{ item.precio }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="total-factura">
+            <h3>Total Pagado: ${{ datosFactura.total.toLocaleString('es-CO') }}</h3>
+          </div>
+          <p class="gracias">¡Gracias por tu compra! Te esperamos pronto.</p>
+        </div>
+        <button class="boton-descargar" @click="descargarPDF">
+          Descargar Factura (PDF) 📄
+        </button>
+      </div>
+    </div>
 
   </div>
 </template>
@@ -130,7 +185,7 @@ const listaCategorias = ref([
 // 1. AQUÍ ESTÁ LA NUEVA BASE DE DATOS UNIFICADA
 const todosLosProductos = [
   // Hamburguesas
-  { id: 101, categoria: 'hamburguesas', nombre: 'Doble Queso XL', precio: '25.900', imagen: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500', disponibilidad: 3, ingredientes: ['Pan artesanal', 'Doble carne de res', 'Doble queso cheddar', 'Lechuga', 'Tomate', 'Salsa de la casa'] },
+  { id: 101, categoria: 'hamburguesas', nombre: 'Doble Queso XL', precio: '25.900', imagen: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500', disponibilidad: 10, ingredientes: ['Pan artesanal', 'Doble carne de res', 'Doble queso cheddar', 'Lechuga', 'Tomate', 'Salsa de la casa'] },
   { id: 102, categoria: 'hamburguesas', nombre: 'Clásica Burg', precio: '18.500', imagen: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?w=500', disponibilidad: 12, ingredientes: ['Pan ajonjolí', 'Carne de res', 'Queso mozzarella', 'Lechuga', 'Tomate', 'Cebolla', 'Mayonesa', 'Salsa de tomate'] },
   { id: 103, categoria: 'hamburguesas', nombre: 'Mexicana Spicy', precio: '24.900', imagen: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=500', disponibilidad: 12, ingredientes: ['Pan artesanal', 'Carne de res', 'Queso pepper jack', 'Guacamole', 'Jalapeños', 'Pico de gallo', 'Nachos triturados'] },
   { id: 104, categoria: 'hamburguesas', nombre: 'Pollo Crispy', precio: '21.000', imagen: 'https://static.wixstatic.com/media/29cc8e_d8a25a27f2f640558f6723144341d662~mv2.jpg/v1/fill/w_740,h_493,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/29cc8e_d8a25a27f2f640558f6723144341d662~mv2.jpg', disponibilidad: 12, ingredientes: ['Pan brioche', 'Pechuga de pollo apanada', 'Queso sabana', 'Lechuga', 'Tomate', 'Salsa tártara'] },
@@ -174,7 +229,7 @@ const todosLosProductos = [
   // Adicionales
   { id: 701, categoria: 'adicionales', nombre: 'Porción de Papas Fritas', precio: '7.500', imagen: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSs_mVbzoN29bqO0I1yBzzUzaKBaEsE1duegw&s', disponibilidad: 12, ingredientes: [] },
   { id: 702, categoria: 'adicionales', nombre: 'Aros de Cebolla x8', precio: '10.000', imagen: 'https://images.unsplash.com/photo-1639024471283-03518883512d?w=500', disponibilidad: 12, ingredientes: [] },
-  { id: 703, categoria: 'adicionales', nombre: 'Deditos de Queso x4', precio: '12.000', imagen: 'https://www.campi.com.co/wp-content/uploads/2021/03/Deditos-De-Queso-Imagen-Destacada.jpg', disponibilidad: 12, ingredientes: [] },
+  { id: 703, categoria: 'adicionales', nombre: 'Deditos de Queso x4', precio: '12.000', imagen: 'https://cdn.colombia.com/gastronomia/2011/08/05/deditos-de-queso-1631.gif', disponibilidad: 12, ingredientes: [] },
   { id: 704, categoria: 'adicionales', nombre: 'Tocino Extra (2 lonjas)', precio: '4.500', imagen: 'https://img.freepik.com/fotos-premium/porcion-tocino-frito_846485-9752.jpg', disponibilidad: 12, ingredientes: [] },
   { id: 705, categoria: 'adicionales', nombre: 'Huevo Frito Extra', precio: '2.500', imagen: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=500', disponibilidad: 12, ingredientes: [] },
   { id: 706, categoria: 'adicionales', nombre: 'Salsas extra x 3', precio: '3.000', imagen: 'https://www.aceitesalbert.com/wp-content/uploads/2020/06/10-mejores-salsas-del-mundo-con-Aceite-de-Oliva-Virgen-Extra.jpg', disponibilidad: 12, ingredientes: [] }
@@ -199,6 +254,21 @@ const mostrarCarrito = ref(false);
 const totalDinero = ref(0);
 const carrito = ref([]);
 const cantidadCarrito = ref(0);
+const alertaMensaje = ref('');
+const alertaVisible = ref(false);
+const alertaTipo = ref('exito');
+const cargando = ref(false); // Esta es la variable del spinner
+
+
+function lanzarAlerta(msj, tipo) {
+  alertaMensaje.value = msj;
+  alertaTipo.value = tipo;
+  alertaVisible.value = true;
+
+  setTimeout(() => {
+    alertaVisible.value = false;
+  }, 3000);
+}
 
 function toggleCarrito() {
   mostrarCarrito.value = !mostrarCarrito.value;
@@ -211,24 +281,58 @@ function agregarAlcarrito(comida) {
     cantidadCarrito.value = carrito.value.length;
     const precioNumerico = parseInt(comida.precio.replace('.', ''));
     totalDinero.value += precioNumerico;
-    console.log("Agregado:" + comida.nombre);
+    lanzarAlerta(`¡${comida.nombre} agregado! 🍔`, 'exito');
   } else {
-    alert("Lo sentimos, No quedan unidades de " + comida.nombre);
+    lanzarAlerta('¡Producto agotado! 🚫', 'error');
   }
 }
+
+const mostrarFactura = ref(false);
+const datosFactura = ref({ items: [], total: 0, fecha: '', id: 0 });
 
 function confirmarPedido() {
   if (carrito.value.length === 0) {
-    alert('El carrito está vacío');
+    lanzarAlerta('¡Tu carrito está triste porque está vacío! 🛒', 'error');
     return;
   }
-  alert(`Pedido confirmado por $${totalDinero.value.toLocaleString('es-CO')}`);
-  carrito.value = [];
-  cantidadCarrito.value = 0;
-  totalDinero.value = 0;
-  mostrarCarrito.value = false;
+  datosFactura.value = {
+    items: [...carrito.value],
+    total: totalDinero.value,
+    fecha: new Date().toLocaleString(),
+    id: Math.floor(Math.random() * 100000)
+  }
+  cargando.value = true;
+  setTimeout(() => {
+    cargando.value = false;
+    mostrarFactura.value = true;
+    lanzarAlerta('¡Pedido confirmado! En camino... 🛵', 'exito');
+    carrito.value = [];
+    cantidadCarrito.value = 0;
+    totalDinero.value = 0;
+    mostrarCarrito.value = false;
+  }, 2000); // 2000 milisegundos = 2 segundos
+}
+function eliminarDelCarrito(index) {
+  const productoAEliminar = carrito.value[index];
+  productoAEliminar.disponibilidad = productoAEliminar.disponibilidad + 1;
+  const precioNumerico = parseInt(productoAEliminar.precio.replace('.', ''));
+  totalDinero.value -= precioNumerico;
+  carrito.value.splice(index, 1);
+  cantidadCarrito.value = carrito.value.length;
+  lanzarAlerta(`Eliminaste: ${productoAEliminar.nombre} 🗑️`, 'info');
 }
 
+function descargarPDF() {
+  const elemento = document.getElementById('seccion-factura');
+  const opciones = {
+    margin: 1,
+    filename: `Factura_BurgBite_${datosFactura.value.id}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+  };
+  html2pdf().set(opciones).from(elemento).save();
+}
 </script>
 
 <style>
@@ -442,8 +546,13 @@ body {
 }
 
 @keyframes vibrar {
-  from { transform: scale(1); }
-  to { transform: scale(1.05); }
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(1.05);
+  }
 }
 
 .pie-final {
@@ -545,7 +654,7 @@ body {
   z-index: 100;
   display: flex;
   flex-direction: column;
-  box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+  box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
   color: white;
 }
 
@@ -555,7 +664,7 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0, 0, 0, 0.6);
   z-index: 90;
 }
 
@@ -574,11 +683,20 @@ body {
   gap: 10px;
 }
 
-.logo-carrito img { width: 35px; }
+.logo-carrito img {
+  width: 35px;
+}
 
-.logo-carrito h2 { font-size: 1rem; margin: 0; }
+.logo-carrito h2 {
+  font-size: 1rem;
+  margin: 0;
+}
 
-.lema { font-size: 0.7rem; color: #E1AD01; margin: 0; }
+.lema {
+  font-size: 0.7rem;
+  color: #E1AD01;
+  margin: 0;
+}
 
 .boton-cerrar {
   background: #A30000;
@@ -599,7 +717,7 @@ body {
   display: flex;
   gap: 15px;
   align-items: center;
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   padding: 10px;
   margin-bottom: 10px;
   border-radius: 10px;
@@ -612,9 +730,17 @@ body {
   object-fit: cover;
 }
 
-.item-nombre { font-size: 0.9rem; font-weight: bold; margin: 0; }
+.item-nombre {
+  font-size: 0.9rem;
+  font-weight: bold;
+  margin: 0;
+}
 
-.item-precio { color: #E1AD01; margin: 0; font-size: 0.85rem; }
+.item-precio {
+  color: #E1AD01;
+  margin: 0;
+  font-size: 0.85rem;
+}
 
 .pie-carrito {
   padding: 20px;
@@ -629,7 +755,10 @@ body {
   margin-bottom: 15px;
 }
 
-.monto-total { color: #E1AD01; font-weight: 800; }
+.monto-total {
+  color: #E1AD01;
+  font-weight: 800;
+}
 
 .boton-pedir {
   width: 100%;
@@ -665,5 +794,219 @@ body {
   /* Un poquito más grande */
 }
 
+.boton-eliminar {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px;
+  transition: transform 0.2s;
+}
+
+.boton-eliminar:hover {
+  transform: scale(1.3);
+}
+
+.toast-personalizado {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 15px 25px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1000;
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.4s ease-out;
+  /* Animación de entrada */
+}
+
+.exito {
+  background-color: #27ae60;
+  border-bottom: 4px solid #1e8449;
+}
+
+.error {
+  background-color: #A30000;
+  border-bottom: 4px solid #7b0000;
+}
+
+.info {
+  background-color: #2980b9;
+  border-bottom: 4px solid #1f618d;
+}
+
+.icono-alerta {
+  font-size: 1.2rem;
+}
+
+/* Animación de entrada */
+@keyframes slideIn {
+  from {
+    top: -100px;
+    opacity: 0;
+  }
+
+  to {
+    top: 20px;
+    opacity: 1;
+  }
+}
+
 /* El resto del CSS (tarjeta-contenedor, tarjeta-frente, etc.) se mantiene igual */
+
+.pantalla-carga {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  /* Por encima de todo */
+  color: white;
+}
+
+/* El círculo que gira */
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid rgba(255, 255, 255, 0.1);
+  border-top: 5px solid #E1AD01;
+  /* El amarillo de tu marca */
+  border-radius: 50%;
+  animation: girar 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes girar {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.overlay-factura {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 3000;
+}
+
+.card-factura {
+  background: white;
+  color: #333;
+  width: 90%;
+  max-width: 450px;
+  max-height: 85vh;
+  padding: 30px;
+  border-radius: 15px;
+  position: relative;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.contenido-factura {
+  padding: 10px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.header-factura {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.header-factura img {
+  width: 60px;
+}
+
+.header-factura h1 {
+  color: #3D2314;
+  margin: 5px 0;
+}
+
+.header-factura .naranja {
+  color: #D35400;
+}
+
+.info-pedido {
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.tabla-factura {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.tabla-factura th {
+  text-align: left;
+  border-bottom: 2px solid #D35400;
+  padding: 10px;
+}
+
+.tabla-factura td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.total-factura {
+  text-align: right;
+  margin-top: 20px;
+  color: #D35400;
+}
+
+.gracias {
+  text-align: center;
+  font-style: italic;
+  margin-top: 20px;
+  font-size: 0.8rem;
+}
+
+.boton-descargar {
+  width: 100%;
+  padding: 12px;
+  background: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 15px;
+}
+
+.cerrar-factura {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: #A30000;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+}
 </style>
