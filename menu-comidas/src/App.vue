@@ -3,10 +3,8 @@
     <header class="barra-superior">
       <div class="ajuste-ancho">
         <div class="marca-tienda">
-          <div class="caja-logo">
-            <img src="https://cdn-icons-png.flaticon.com/512/737/737967.png" alt="Logo" class="icono-logo-img">
-          </div>
           <div class="nombres">
+            <img src="https://cdn-icons-png.flaticon.com/512/737/737967.png" alt="Logo" class="icono-logo-img">
             <h1 class="titulo-negocio">BURG & <span class="naranja">BITE</span></h1>
             <p class="ciudad">San Gil, Santander</p>
           </div>
@@ -62,11 +60,21 @@
               </div>
             </div>
             <div class="tarjeta-atras">
+              <div class="logo-esquina">
+                <img src="https://cdn-icons-png.flaticon.com/512/737/737967.png" alt="logo">
+                <span> BURG & BITE</span>
+              </div>
               <div class="contenido-atras">
-                <h3>Ingredientes</h3>
-                <p>{{ comida.ingredientes }}</p>
-                <span class="tocar-para-volver">Click para volver</span>
-                <button class="boton-volver" @click.stop="voltear(comida)">Volver</button>
+                <h3 class="titulo-ingredientes">Ingredientes</h3>
+                <ul class="lista-ingredientes">
+                  <li v-for="(ing, i) in comida.ingredientes" :key="i">
+                    <span class="punto-naranja">•</span>{{ ing }}
+                  </li>
+                </ul>
+                <div class="footer-atras" @click.stop="voltear(comida)">
+                  <span class="tocar-para-volver">Click para volver</span>
+                  <button class="boton-volver">Volver a la carta</button>
+                </div>
               </div>
             </div>
 
@@ -93,12 +101,12 @@
       </div>
       <div class="lista-items">
         <p v-if="carrito.length === 0" class="carrito-vacio">Tu carrito está vacío</p>
-        <div v-for="(item, index) in carrito" :key="index" class="item-carrito">
+        <div v-for="(item, index) in carrito" :key="item.id" class="item-carrito">
           <img :src="item.imagen" alt="foto">
           <div class="item-info">
-            <p class="item-nombre">{{ item.nombre }}</p>
-            <p class="item-precio">{{ item.precio }}</p>
-            <button class="boton-eliminar" @click="eliminarDelCarrito(index)">
+            <p class="item-nombre">{{ item.nombre }} x{{ item.cantidad }}</p>
+            <p class="item-precio">${{ (parseInt(item.precio.replace('.', '')) * item.cantidad).toLocaleString('es-CO') }}</p>
+            <button class="boton-eliminar" @click="eliminarDelCarrito(item.id)">
               🗑️
             </button>
           </div>
@@ -276,9 +284,20 @@ function toggleCarrito() {
 
 function agregarAlcarrito(comida) {
   if (comida.disponibilidad > 0) {
-    comida.disponibilidad = comida.disponibilidad - 1;
-    carrito.value.push(comida);
-    cantidadCarrito.value = carrito.value.length;
+    comida.disponibilidad -= 1;
+    const existingItem = carrito.value.find(item => item.id === comida.id);
+    if (existingItem) {
+      existingItem.cantidad += 1;
+    } else {
+      carrito.value.push({
+        id: comida.id,
+        nombre: comida.nombre,
+        precio: comida.precio,
+        imagen: comida.imagen,
+        cantidad: 1
+      });
+    }
+    cantidadCarrito.value = carrito.value.reduce((sum, i) => sum + i.cantidad, 0);
     const precioNumerico = parseInt(comida.precio.replace('.', ''));
     totalDinero.value += precioNumerico;
     lanzarAlerta(`¡${comida.nombre} agregado! 🍔`, 'exito');
@@ -296,7 +315,7 @@ function confirmarPedido() {
     return;
   }
   datosFactura.value = {
-    items: [...carrito.value],
+    items: carrito.value.flatMap(item => Array(item.cantidad).fill({nombre: item.nombre, precio: item.precio})),
     total: totalDinero.value,
     fecha: new Date().toLocaleString(),
     id: Math.floor(Math.random() * 100000)
@@ -312,14 +331,23 @@ function confirmarPedido() {
     mostrarCarrito.value = false;
   }, 2000); // 2000 milisegundos = 2 segundos
 }
-function eliminarDelCarrito(index) {
-  const productoAEliminar = carrito.value[index];
-  productoAEliminar.disponibilidad = productoAEliminar.disponibilidad + 1;
-  const precioNumerico = parseInt(productoAEliminar.precio.replace('.', ''));
-  totalDinero.value -= precioNumerico;
-  carrito.value.splice(index, 1);
-  cantidadCarrito.value = carrito.value.length;
-  lanzarAlerta(`Eliminaste: ${productoAEliminar.nombre} 🗑️`, 'info');
+function eliminarDelCarrito(id) {
+  const itemIndex = carrito.value.findIndex(item => item.id === id);
+  if (itemIndex !== -1) {
+    const item = carrito.value[itemIndex];
+    item.cantidad -= 1;
+    if (item.cantidad === 0) {
+      carrito.value.splice(itemIndex, 1);
+    }
+    cantidadCarrito.value = carrito.value.reduce((sum, i) => sum + i.cantidad, 0);
+    const precioNumerico = parseInt(item.precio.replace('.', ''));
+    totalDinero.value -= precioNumerico;
+    const productoOriginal = todosLosProductos.find(p => p.id === id);
+    if (productoOriginal) {
+      productoOriginal.disponibilidad += 1;
+    }
+    lanzarAlerta(`Eliminaste uno: ${item.nombre} 🗑️`, 'info');
+  }
 }
 
 function descargarPDF() {
@@ -603,15 +631,46 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 30px 20px;
+  position: relative;
   border: 2px solid #E1AD01;
+  flex-direction: column;
+}
+.logo-esquina img{
+width: 20px;
+}
+.logo-esquina span{
+  font-size: 0.6rem;
+  color: #FDFEFE;
+  font-weight: bold;
 }
 
-.contenido-atras h3 {
+.titulo-ingredientes{
   color: #E1AD01;
+  font-size: 1.3rem;
   margin-bottom: 15px;
+  border-bottom: 1px solid rgba(225, 173, 1, 0.3);
+  display: inline-block;
+  padding-bottom: 5px;
 }
-
+.lista-ingredientes{
+  list-style: none;
+  padding: 0;
+  text-align:left;
+  margin: 0 auto 20px auto;
+  max-width: 80%;
+}
+.lista-ingredientes li{
+color: #FDFEFE;
+font-size: 0.9rem;
+margin-bottom: 6px;
+font-weight: 300;
+}
+.punto-naranja {
+  color: #f36f21;
+  font-weight: bold;
+  margin-right: 5px;
+}
 .boton-volver {
   margin-top: 20px;
   background: transparent;
